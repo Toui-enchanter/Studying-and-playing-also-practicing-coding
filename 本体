@@ -1,0 +1,112 @@
+// ==========================================
+// 設定項目
+// ==========================================
+const DISCORD_WEBHOOK_URL = "DiscordのウェブフックURL"; // 
+const RSS_URL = "RSSを入力";   // RSSが無い場合はRSS.appでつくるのが望ましい
+
+/**
+ * メイン処理：10〜15分ごとの定期実行用
+ */
+function checkPokemonGoNews() {
+  if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("YOUR_DISCORD_WEBHOOK_URL_HERE")) {
+    console.error("DiscordのWebhook URLが設定されていません。");
+    return;
+  }
+
+  // 1. RSSフィードの取得
+  const response = UrlFetchApp.fetch(RSS_URL, { muteHttpExceptions: true });
+  if (response.getResponseCode() !== 200) {
+    console.error("RSSの取得に失敗しました。Status:", response.getResponseCode());
+    return;
+  }
+
+  const xml = XmlService.parse(response.getContentText());
+  const root = xml.getRootElement();
+  const channel = root.getChild('channel');
+  const items = channel.getChildren('item');
+
+  if (!items || items.length === 0) {
+    console.log("記事が見つかりませんでした。");
+    return;
+  }
+
+  // 2. メモ帳（PropertiesService）から過去に送った最新記事URLを取得
+  const props = PropertiesService.getScriptProperties();
+  const lastSentUrl = props.getProperty('LAST_SENT_URL');
+
+  // RSSの最新記事（先頭）を取得
+  const latestItem = items[0];
+  const title = latestItem.getChildText('title');
+  const link = latestItem.getChildText('link');
+  const pubDateText = latestItem.getChildText('pubDate');
+  
+  // 画像URLの抽出（存在する場合）
+  let imageUrl = null;
+  const enclosure = latestItem.getChild('enclosure');
+  if (enclosure) {
+    imageUrl = enclosure.getAttribute('url') ? enclosure.getAttribute('url').getValue() : null;
+  }
+
+  // 3. メモ（過去のURL）と比較する
+  if (link === lastSentUrl) {
+    console.log("新着記事はありません。（最新記事: " + title + "）");
+    return;
+  }
+
+  // 初回実行時（メモがまだ空の場合）は、連投を防ぐためメモ保存のみを行って終了
+  if (!lastSentUrl) {
+    props.setProperty('LAST_SENT_URL', link);
+    console.log("初回実行のため、最新記事URLをメモ（記録）しました: " + link);
+    return;
+  }
+
+  // 4. 新着記事があればDiscordへ通知
+  const success = sendToDiscord(title, link, pubDateText, imageUrl);
+
+  // 送信に成功したらメモ（記録）を最新URLに更新
+  if (success) {
+    props.setProperty('LAST_SENT_URL', link);
+    console.log("新着記事を通知しました: " + title);
+  }
+}
+
+/**
+ * Discord Webhook送信関数
+ */
+function sendToDiscord(title, url, pubDate, imageUrl) {
+  const payload = {
+    username: "Pokémon GO ニュース",
+    avatar_url: "https://pokemongolive.com/img/icons/share-icon.png",
+    embeds: [
+      {
+        title: title,
+        url: url,
+        color: 0xEE1515, // モンスターボールカラー（赤）
+        description: "Pokémon GO 公式ブログに新しいニュースが投稿されました！",
+        fields: [
+          {
+            name: "公開日時",
+            value: pubDate ? new Date(pubDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : "不明",
+            inline: true
+          }
+        ],
+        image: imageUrl ? { url: imageUrl } : null,
+        footer: {
+          text: "Pokémon GO Live News",
+          icon_url: "https://pokemongolive.com/img/icons/share-icon.png"
+        },
+        timestamp: new Date().toISOString()
+      }
+    ]
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const res = UrlFetchApp.fetch(DISCORD_WEBHOOK_URL, options);
+  return res.getResponseCode() === 204 || res.getResponseCode() === 200;
+}
