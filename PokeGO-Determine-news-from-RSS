@@ -84,7 +84,7 @@ function sendToDiscord(title, url, pubDate, imageUrl) {
       {
         title: title,
         url: url,
-        color: randomColor, // ★ ここを randomColor に変更！
+        color: randomColor, // 
         description: "Pokémon GO 公式ブログに新しいニュースが投稿されました！",
         fields: [
           {
