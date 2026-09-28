@@ -5,7 +5,7 @@ const DISCORD_WEBHOOK_URL = "DiscordのウェブフックURL"; //
 const RSS_URL = "RSSを入力";   // RSSが無い場合はRSS.appでつくるのが望ましい
 
 /**
- * メイン処理：10〜15分ごとの定期実行用
+ * メイン処理
  */
 function checkPokemonGoNews() {
   if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("YOUR_DISCORD_WEBHOOK_URL_HERE")) {
@@ -30,30 +30,30 @@ function checkPokemonGoNews() {
     return;
   }
 
-  // 2. メモ帳（PropertiesService）から過去に送った最新記事URLを取得
+  // 2. PropertiesServiceから過去に送った最新記事URLを取得
   const props = PropertiesService.getScriptProperties();
   const lastSentUrl = props.getProperty('LAST_SENT_URL');
 
-  // RSSの最新記事（先頭）を取得
+  // RSSの最新記事　先頭を取得
   const latestItem = items[0];
   const title = latestItem.getChildText('title');
   const link = latestItem.getChildText('link');
   const pubDateText = latestItem.getChildText('pubDate');
   
-  // 画像URLの抽出（存在する場合）
+  // 画像URLの抽出
   let imageUrl = null;
   const enclosure = latestItem.getChild('enclosure');
   if (enclosure) {
     imageUrl = enclosure.getAttribute('url') ? enclosure.getAttribute('url').getValue() : null;
   }
 
-  // 3. メモ（過去のURL）と比較する
+  // 3. 過去のURLと比較する
   if (link === lastSentUrl) {
     console.log("新着記事はありません。（最新記事: " + title + "）");
     return;
   }
 
-  // 初回実行時（メモがまだ空の場合）は、連投を防ぐためメモ保存のみを行って終了
+  // 初回実行時（ログが空の場合）は、連投を防ぐためメモ保存のみを行って終了
   if (!lastSentUrl) {
     props.setProperty('LAST_SENT_URL', link);
     console.log("初回実行のため、最新記事URLをメモ（記録）しました: " + link);
@@ -63,7 +63,7 @@ function checkPokemonGoNews() {
   // 4. 新着記事があればDiscordへ通知
   const success = sendToDiscord(title, link, pubDateText, imageUrl);
 
-  // 送信に成功したらメモ（記録）を最新URLに更新
+  // 送信に成功したら記録を最新URLに更新
   if (success) {
     props.setProperty('LAST_SENT_URL', link);
     console.log("新着記事を通知しました: " + title);
@@ -74,6 +74,9 @@ function checkPokemonGoNews() {
  * Discord Webhook送信関数
  */
 function sendToDiscord(title, url, pubDate, imageUrl) {
+  // ランダムなカラーコード（0x000000 〜 0xFFFFFF）を生成
+  const randomColor = Math.floor(Math.random() * 16777215);
+
   const payload = {
     username: "Pokémon GO ニュース",
     avatar_url: "https://pokemongolive.com/img/icons/share-icon.png",
@@ -81,7 +84,7 @@ function sendToDiscord(title, url, pubDate, imageUrl) {
       {
         title: title,
         url: url,
-        color: 0xEE1515, // モンスターボールカラー（赤）
+        color: randomColor, // ★ ここを randomColor に変更！
         description: "Pokémon GO 公式ブログに新しいニュースが投稿されました！",
         fields: [
           {
